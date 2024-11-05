@@ -14,7 +14,12 @@ contract CallFactory {
         emit CallCreated(address(newCall), _user1, _user2);
         return address(newCall);
     }
-    
+
+    function addUserCall(address user1, address user2, address call) external {
+        userCalls[user1].push(call);
+        userCalls[user2].push(call);
+    }
+
     function getUserCalls(address user) external view returns (address[] memory) {
         return userCalls[user];
     }
