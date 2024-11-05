@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Audio Chat</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/web3/1.8.2/web3.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tweetnacl/1.0.3/nacl.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #4F46E5;
+            --background-color: #F3F4F6;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: var(--background-color);
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .input-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        button:disabled {
+            background-color: #ccc;
+        }
+
+        .recording-controls {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f8f8;
+            border-radius: 4px;
+        }
+
+        .messages {
+            margin-top: 20px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .message {
+            padding: 10px;
+            margin: 5px 0;
+            background-color: #f8f8f8;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .recording {
+            color: red;
+            display: none;
+        }
+
+        .active-call {
+            margin: 15px 0;
+            padding: 10px;
+            background-color: #e8e8e8;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Simple Audio Chat</h1>
+        
+        <div class="input-group">
+            <label for="user1Address">Your Address:</label>
+            <input type="text" id="user1Address" placeholder="0x...">
+        </div>
+        
+        <div class="input-group">
+            <label for="user2Address">Recipient's Address:</label>
+            <input type="text" id="user2Address" placeholder="0x...">
+        </div>
+        
+        <button onclick="createCall()">Create Call</button>
+        
+        <div id="activeCall" class="active-call" style="display: none;">
+            <h3>Active Call</h3>
+            <p id="callAddress"></p>
+        </div>
+        
+        <div id="recordingControls" class="recording-controls" style="display: none;">
+            <button id="recordButton">Start Recording</button>
+            <button id="sendButton" disabled>Send Message</button>
+            <span id="recordingIndicator" class="recording">Recording...</span>
+        </div>
+        
+        <div class="messages" id="messages"></div>
+    </div>
+
+    <script>
+        let web3;
+        let currentCall;
+        let mediaRecorder;
+        let audioChunks = [];
+        let userKeyPair;
+        var Factory_address = '0x36256FA18d65a7946f77bd6564c756CaB3849180'; // Replace with your CallFactory contract address
+        var Ethereum_Node_url = 'https://ropsten.infura.io/v3/your_infura_project_id'; // Replace with your Ethereum node URL
+
+        // Initialize Web3
+        async function initWeb3() {
+            web3 = new Web3(Ethereum_Node_url); // Replace with your Ethereum node URL
+        }
+
+        // Create new call
+        async function createCall() {
+            const user1 = document.getElementById('user1Address').value;
+            const user2 = document.getElementById('user2Address').value;
+
+            if (!web3.utils.isAddress(user1) || !web3.utils.isAddress(user2)) {
+                alert('Invalid Ethereum address');
+                return;
+            }
+
+            // Deploy CallFactory contract first (contract address would be needed)
+            const factoryContract = new web3.eth.Contract(callFactoryABI, Factory_address);
+            
+            try {
+                await factoryContract.methods.createCall(user1, user2).send({
+                    from: user1,
+                    gas: 3000000
+                });
+
+                factoryContract.events.CallCreated()
+                    .on('data', (event) => {
+                        currentCall = event.returnValues.call;
+                        setupCall();
+                    });
+            } catch (error) {
+                console.error('Error creating call:', error);
+                alert('Error creating call: ' + error.message);
+            }
+        }
+
+        function setupCall() {
+            document.getElementById('activeCall').style.display = 'block';
+            document.getElementById('callAddress').textContent = `Call Address: ${currentCall}`;
+            document.getElementById('recordingControls').style.display = 'block';
+            setupRecording();
+            listenForMessages();
+        }
+
+        function setupRecording() {
+            const recordButton = document.getElementById('recordButton');
+            const sendButton = document.getElementById('sendButton');
+            const recordingIndicator = document.getElementById('recordingIndicator');
+
+            recordButton.addEventListener('click', async () => {
+                if (mediaRecorder && mediaRecorder.state === 'recording') {
+                    mediaRecorder.stop();
+                    recordButton.textContent = 'Start Recording';
+                    sendButton.disabled = false;
+                    recordingIndicator.style.display = 'none';
+                } else {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    mediaRecorder = new MediaRecorder(stream);
+                    audioChunks = [];
+
+                    mediaRecorder.addEventListener('dataavailable', event => {
+                        audioChunks.push(event.data);
+                    });
+
+                    mediaRecorder.start();
+                    recordButton.textContent = 'Stop Recording';
+                    sendButton.disabled = true;
+                    recordingIndicator.style.display = 'inline';
+                }
+            });
+
+            sendButton.addEventListener('click', sendMessage);
+        }
+
+        async function sendMessage() {
+            const user1 = document.getElementById('user1Address').value;
+            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+            const contentId = 'DUMMY_CID'; // Replace with actual IPFS upload
+            
+            const callContract = new web3.eth.Contract(callABI, currentCall);
+            try {
+                await callContract.methods.sendMessage(user1, contentId).send({
+                    from: user1,
+                    gas: 200000
+                });
+                document.getElementById('sendButton').disabled = true;
+            } catch (error) {
+                console.error('Error sending message:', error);
+                alert('Error sending message: ' + error.message);
+            }
+        }
+
+        function listenForMessages() {
+            const callContract = new web3.eth.Contract(callABI, currentCall);
+            callContract.events.NewMessage()
+                .on('data', (event) => {
+                    const { sender, contentId, messageIndex } = event.returnValues;
+                    displayMessage(sender, contentId, messageIndex);
+                });
+        }
+
+        function displayMessage(sender, contentId, index) {
+            const messagesDiv = document.getElementById('messages');
+            const messageElement = document.createElement('div');
+            messageElement.className = 'message';
+            
+            const senderLabel = document.createElement('span');
+            senderLabel.textContent = `From: ${sender.substring(0, 6)}...${sender.substring(38)}`;
+            
+            const playButton = document.createElement('button');
+            playButton.textContent = 'Play';
+            playButton.onclick = () => {
+                // Here you would:
+                // 1. Fetch audio from IPFS using contentId
+                // 2. Play the audio
+                // 3. Mark as listened
+                alert('Audio playback not implemented in this demo');
+                markMessageAsListened(index);
+            };
+            
+            messageElement.appendChild(senderLabel);
+            messageElement.appendChild(playButton);
+            messagesDiv.appendChild(messageElement);
+        }
+
+        async function markMessageAsListened(index) {
+            const user1 = document.getElementById('user1Address').value;
+            const callContract = new web3.eth.Contract(callABI, currentCall);
+            try {
+                await callContract.methods.markMessageAsListened(user1, index).send({
+                    from: user1,
+                    gas: 100000
+                });
+            } catch (error) {
+                console.error('Error marking message as listened:', error);
+            }
+        }
+
+        // Initialize when page loads
+        window.addEventListener('load', initWeb3);
+    </script>
+</body>
+</html>
