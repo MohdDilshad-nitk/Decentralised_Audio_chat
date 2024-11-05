@@ -213,6 +213,9 @@
                 
 
                 console.log('Call ABI:', callABI);
+                // console.log('Call ABI:', CallContractData.bytecode);
+                
+                // callABI = CallContractData.abi;
 
                 const call = new web3.eth.Contract(callABI);
 
@@ -245,7 +248,19 @@
                 });
 
                 console.log('Call added to factory');
+                
+                // currentCall = resp;
                 setupCall();
+
+                // factoryContract.events.CallCreated()
+                //     .on('data', (event) => {
+                //         currentCall = event.returnValues.call;
+                //         setupCall();
+                //     });
+
+
+
+                // Fetch the ABI for CallFactory
 
 
             } catch (error) {
@@ -328,12 +343,13 @@
             const callContract = new web3.eth.Contract(callABI, currentCall);
 
             //get the last message from the contract using the getLastMessage function
-            const lastMessage = await callContract.methods.getLastMessage(user1).call();
-            console.log("lastMessage", lastMessage);
+            const contentId = await callContract.methods.getLastMessage(user1).call();
+            console.log("lastMessage", contentId);
+            displayMessage(user2, contentId);
             
         }
 
-        function displayMessage(sender, contentId, index) {
+        function displayMessage(sender, contentId) {
             const messagesDiv = document.getElementById('messages');
             const messageElement = document.createElement('div');
             messageElement.className = 'message';
@@ -349,7 +365,7 @@
                 // 2. Play the audio
                 // 3. Mark as listened
                 alert('Audio playback not implemented in this demo');
-                markMessageAsListened(index);
+                // markMessageAsListened(index);
             };
             
             messageElement.appendChild(senderLabel);
