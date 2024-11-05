@@ -127,18 +127,37 @@
 
     <script>
         let web3;
+        let callABI;
+        let CallContractData;
         let currentCall;
+        let callFactoryABI;
         let mediaRecorder;
         let audioChunks = [];
         let userKeyPair;
         var Factory_address = '0x36256FA18d65a7946f77bd6564c756CaB3849180'; // Replace with your CallFactory contract address
         var Ethereum_Node_url = 'http://127.0.0.1:7545'; // Replace with your Ethereum node URL
 
+        
+
         // Initialize Web3
         async function initWeb3() {
             web3 = new Web3(Ethereum_Node_url); // Replace with your Ethereum node URL
-        }
 
+            // Fetch the ABI for CallFactory
+            console.log('Fetching ABI for CallFactory');
+            
+        const response = await fetch('../build/contracts/CallFactory.json');
+        const factoryContractData = await response.json();
+        callFactoryABI = factoryContractData.abi;
+        console.log('Factory ABI:', callFactoryABI);
+        
+        const resp = await fetch('../build/contracts/Call.json');
+        CallContractData = await resp.json();
+        callABI = CallContractData.abi;
+        console.log('Call ABI:', callABI);
+        
+        }
+        
         // Create new call
         async function createCall() {
             const user1 = document.getElementById('user1Address').value;
@@ -153,16 +172,56 @@
             const factoryContract = new web3.eth.Contract(callFactoryABI, Factory_address);
             
             try {
-                await factoryContract.methods.createCall(user1, user2).send({
+                var resp = await factoryContract.methods.createCall(user1, user2).send({
                     from: user1,
                     gas: 3000000
                 });
+                
+                
 
-                factoryContract.events.CallCreated()
-                    .on('data', (event) => {
-                        currentCall = event.returnValues.call;
-                        setupCall();
-                    });
+                console.log('Call ABI:', callABI);
+                // console.log('Call ABI:', CallContractData.bytecode);
+                
+                // callABI = CallContractData.abi;
+
+                const call = new web3.eth.Contract(callABI);
+
+                const factoryInstance = await call.deploy({
+                            data: CallContractData.bytecode,
+                            arguments: [user1, user2]
+                        }).send({
+                            from: user1,
+                            gas: 3000000
+                        }).on("receipt", (receipt) => {
+ 
+                                // Contract Address will be returned here
+                                currentCall = receipt.contractAddress;
+                                console.log("Contract Address:", receipt.contractAddress);
+                                })
+                            .then((initialContract) => {
+                                // Contract Address will be returned here
+                                console.log("Contract Address:", initialContract.options.address);
+                        });
+                        
+                        // currentCall = factoryInstance.options.address;
+                        console.log('Deployed CallFactory to:', currentCall);
+
+
+                console.log('call created', currentCall);
+                // currentCall = resp;
+                setupCall();
+
+                // factoryContract.events.CallCreated()
+                //     .on('data', (event) => {
+                //         currentCall = event.returnValues.call;
+                //         setupCall();
+                //     });
+
+
+
+                // Fetch the ABI for CallFactory
+
+
             } catch (error) {
                 console.error('Error creating call:', error);
                 alert('Error creating call: ' + error.message);
@@ -170,6 +229,8 @@
         }
 
         function setupCall() {
+            console.log('Call created:', currentCall);
+            
             document.getElementById('activeCall').style.display = 'block';
             document.getElementById('callAddress').textContent = `Call Address: ${currentCall}`;
             document.getElementById('recordingControls').style.display = 'block';
