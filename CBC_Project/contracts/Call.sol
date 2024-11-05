@@ -21,6 +21,12 @@ contract Call {
         require(sender == user1 || sender == user2, "Only call participants can send messages");
         _;
     }
+
+    //write a function to return the last element from userMessages, if user1 is calling the function then return the last element of user2Messages and vice versa
+    function getLastMessage(address user) external view returns (string memory) {
+        require(user == user1 || user == user2, "Invalid user");
+        return user == user1 ? user2Messages[user2Messages.length - 1] : user1Messages[user1Messages.length - 1];
+    }
     
     function sendMessage(address sender, string memory contentId) external onlyParticipants(sender) {
         if (sender == user1) {
