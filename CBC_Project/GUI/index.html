@@ -110,8 +110,10 @@
         </div>
         
         <button onclick="createCall()">Create Call</button>
+        <button onclick="fetchCall()">Fetch Call</button>
+        <button onclick="listenForMessages()">check new message</button>
         
-        <div id="activeCall" class="active-call" style="display: none;">
+        <div id="activeCall" class="active-call" style="display: block;">
             <h3>Active Call</h3>
             <p id="callAddress"></p>
         </div>
@@ -134,7 +136,7 @@
         let mediaRecorder;
         let audioChunks = [];
         let userKeyPair;
-        var Factory_address = '0x36256FA18d65a7946f77bd6564c756CaB3849180'; // Replace with your CallFactory contract address
+        var Factory_address = '0xb35fA41d49915D50A9FDb14567106597B4aA4679'; // Replace with your CallFactory contract address
         var Ethereum_Node_url = 'http://127.0.0.1:7545'; // Replace with your Ethereum node URL
 
         
@@ -155,7 +157,38 @@
         CallContractData = await resp.json();
         callABI = CallContractData.abi;
         console.log('Call ABI:', callABI);
+
+       
         
+        
+
+       
+        
+        }
+
+        async function fetchCall() {
+            const user1 = document.getElementById('user1Address').value;
+            const factoryContract = new web3.eth.Contract(callFactoryABI, Factory_address);
+             // Display the active calls
+        const activeCallsDiv = document.getElementById('activeCall');
+        const userCalls = await factoryContract.methods.getUserCalls(user1).call();
+        
+
+        //if userCalls is empty, log no calls found
+        // if(userCalls.length)
+        console.log(userCalls);
+        
+
+
+        userCalls.forEach(callAddress => {
+            const callElement = document.createElement('div');
+            callElement.textContent = `Active Call: ${callAddress}`;
+            activeCallsDiv.appendChild(callElement);
+        });
+
+        currentCall = userCalls[userCalls.length - 1];
+        setupCall();
+            
         }
         
         // Create new call
@@ -180,9 +213,6 @@
                 
 
                 console.log('Call ABI:', callABI);
-                // console.log('Call ABI:', CallContractData.bytecode);
-                
-                // callABI = CallContractData.abi;
 
                 const call = new web3.eth.Contract(callABI);
 
@@ -208,18 +238,14 @@
 
 
                 console.log('call created', currentCall);
-                // currentCall = resp;
+
+                await factoryContract.methods.addUserCall(user1, user2, currentCall).send({
+                    from: user1,
+                    gas: 200000
+                });
+
+                console.log('Call added to factory');
                 setupCall();
-
-                // factoryContract.events.CallCreated()
-                //     .on('data', (event) => {
-                //         currentCall = event.returnValues.call;
-                //         setupCall();
-                //     });
-
-
-
-                // Fetch the ABI for CallFactory
 
 
             } catch (error) {
@@ -271,6 +297,12 @@
         async function sendMessage() {
             const user1 = document.getElementById('user1Address').value;
             const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+
+
+
+
+
+
             const contentId = 'DUMMY_CID'; // Replace with actual IPFS upload
             
             const callContract = new web3.eth.Contract(callABI, currentCall);
@@ -279,6 +311,9 @@
                     from: user1,
                     gas: 200000
                 });
+
+                console.log('Message sent');
+                
                 document.getElementById('sendButton').disabled = true;
             } catch (error) {
                 console.error('Error sending message:', error);
@@ -286,13 +321,16 @@
             }
         }
 
-        function listenForMessages() {
+        async function listenForMessages() {
+            console.log('listening messages');
+            const user1 = document.getElementById('user1Address').value;
+            
             const callContract = new web3.eth.Contract(callABI, currentCall);
-            callContract.events.NewMessage()
-                .on('data', (event) => {
-                    const { sender, contentId, messageIndex } = event.returnValues;
-                    displayMessage(sender, contentId, messageIndex);
-                });
+
+            //get the last message from the contract using the getLastMessage function
+            const lastMessage = await callContract.methods.getLastMessage(user1).call();
+            console.log("lastMessage", lastMessage);
+            
         }
 
         function displayMessage(sender, contentId, index) {
